@@ -1,11 +1,12 @@
--- PCSHOW V2 - REAL TIME AGGRESSIVE SPOOF
--- Este script falsifica la plataforma a un nivel más bajo y agresivo para juegos como Blade Ball.
+-- PCSHOW V3 - ULTIMATE PC SPOOFER
+-- Creado para Blade Ball y juegos con detección avanzada.
 
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
--- 1. Engañar las propiedades y llamadas a nivel bajo (Metamethods)
+-- 1. Engañar TODAS las propiedades de dispositivos
 local oldIndex
 oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
     if not checkcaller() then
@@ -14,6 +15,7 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
             if key == "KeyboardEnabled" then return true end
             if key == "MouseEnabled" then return true end
             if key == "GamepadEnabled" then return false end
+            if key == "VREnabled" then return false end
         elseif self == GuiService then
             if key == "IsTenFootInterface" then return false end
         end
@@ -21,63 +23,68 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
     return oldIndex(self, key)
 end))
 
+-- 2. Engañar métodos clave (GetLastInputType y ocultar TouchGui a otros scripts)
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local method = getnamecallmethod()
+    local args = {...}
     
     if not checkcaller() then
-        if self == UserInputService and method == "GetPlatform" then
-            return Enum.Platform.Windows
-        elseif self == GuiService and method == "IsTenFootInterface" then
-            return false
+        if self == UserInputService then
+            if method == "GetPlatform" then
+                return Enum.Platform.Windows
+            elseif method == "GetLastInputType" then
+                -- Muchos juegos modernos usan esto para saber tu dispositivo real
+                return Enum.UserInputType.Keyboard 
+            end
+        elseif self == GuiService then
+            if method == "IsTenFootInterface" then
+                return false
+            end
+        end
+        
+        -- Si el juego intenta buscar "TouchGui" para saber si estás en móvil, le devolvemos nil (como si no existiera)
+        if method == "FindFirstChild" or method == "WaitForChild" then
+            if type(args[1]) == "string" and (args[1] == "TouchGui" or args[1]:lower():match("mobile")) then
+                return nil
+            end
         end
     end
+    
     return oldNamecall(self, ...)
 end))
 
--- 2. Limpieza Agresiva de UI Móvil en Tiempo Real
-local player = Players.LocalPlayer
+-- 3. Forzar el cursor del ratón en pantalla
+UserInputService.MouseIconEnabled = true
 
-local function killMobileUI()
-    if not player then return end
-    local pgui = player:FindFirstChild("PlayerGui")
-    if not pgui then return end
-    
-    -- Destruir o deshabilitar TouchGui (interfaz nativa de Roblox)
-    local touch = pgui:FindFirstChild("TouchGui")
-    if touch then
-        touch.Enabled = false
-    end
-    
-    -- Ocultar botones específicos de juegos como Blade Ball (Mobile UI)
-    for _, v in pairs(pgui:GetDescendants()) do
-        if v:IsA("ScreenGui") then
-            local name = v.Name:lower()
-            if name:match("mobile") or name:match("touchgui") then
-                v.Enabled = false
-            end
-        elseif v:IsA("GuiObject") then
-            local name = v.Name:lower()
-            -- Busca botones de dash, block o salto diseñados para móvil
-            if name:match("mobile") or name:match("touch") or name == "jumpbutton" then
-                v.Visible = false
+-- 4. Bucle infinito e indestructible para ocultar la UI táctil
+-- Esto soluciona el problema de que los botones reaparezcan al morir o respawnear
+task.spawn(function()
+    while task.wait(0.1) do -- Revisa 10 veces por segundo
+        local player = Players.LocalPlayer
+        if player then
+            local pgui = player:FindFirstChild("PlayerGui")
+            if pgui then
+                -- Ocultar UI nativa de Roblox
+                local touch = pgui:FindFirstChild("TouchGui")
+                if touch then 
+                    touch.Enabled = false 
+                end
+                
+                -- Ocultar botones específicos de Blade Ball
+                for _, v in pairs(pgui:GetDescendants()) do
+                    if v:IsA("ScreenGui") and v.Name:lower():match("mobile") then
+                        v.Enabled = false
+                    elseif v:IsA("GuiObject") then
+                        local name = v.Name:lower()
+                        if name == "mobilejump" or name == "mobiledash" or name == "mobileblock" or name == "jumpbutton" then
+                            v.Visible = false
+                        end
+                    end
+                end
             end
         end
     end
-end
+end)
 
--- Ejecutar la limpieza inmediatamente
-task.spawn(killMobileUI)
-
--- Ejecutar la limpieza cada vez que el juego intente crear un nuevo botón (útil al reaparecer o cargar UI tarde)
-if player then
-    local pgui = player:WaitForChild("PlayerGui", 5)
-    if pgui then
-        pgui.DescendantAdded:Connect(function()
-            task.wait() -- Esperar a que el elemento se cargue por completo
-            killMobileUI()
-        end)
-    end
-end
-
-print("[PCSHOW V2] Spoof agresivo en tiempo real aplicado.")
+print("[PCSHOW V3] Spoof definitivo aplicado. Cursor forzado y TouchGui erradicado.")
